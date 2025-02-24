@@ -1,12 +1,41 @@
 name: "Build kernels"
 
 env:
-  CONFIGURATION: "repos.json"
   OUT_DIR: "out"
 
 on:
   workflow_dispatch:
     inputs:
+      kernelSourceURL:
+        description: "Custom kernel source URL"
+        required: true
+        type: string
+        default: "https://github.com/KDEFFALT/kernel_msm-5.15" # Default kernel source URL
+      kernelPrivateSource:
+        description: "is private source?"
+        required: false
+        type: boolean
+        default: false
+      kernelBranch:
+        description: "kernel branch (default if empty)"
+        required: false
+        type: string
+        default: "main"
+      kernelDevice:
+        description: "Device (used for defconfig)"
+        required: true
+        type: string
+        default: "gki"  # Default device codename
+      kernelSourceName:
+        description: "Kernel source name"
+        required: true
+        type: string
+        default: "kernel_msm-5.15"  # Default kernel source name
+      localVersion:
+        description: "Custom localversion name (e.g., -mybuild)"
+        required: false
+        type: string
+        default: ""  # Default is empty (no suffix)
       kernelSUChoice:
         description: "Choose KernelSU version"
         required: true
@@ -27,46 +56,21 @@ on:
         description: "SUSFS branch to use"
         required: false
         type: string
-        default: "gki-android13-5.15"
-      kernelSourceURL:
-        description: "Custom kernel source URL"
-        required: true
-        type: string
-        default: "https://github.com/topnotchfreaks/kernel_msm-5.15"
-      kernelPrivateSource:
-        description: "Is private source?"
+        default: "gki-android13-5.15"  # Default SUSFS branch
+      clangCompiler:
+        description: "Clang compiler to use"
         required: false
-        type: boolean
-        default: false
-      kernelBranch:
-        description: "Kernel branch (default if empty)"
-        required: false
-        type: string
-        default: "android13-5.15"
-      kernelSourceName:
-        description: "Kernel source name"
-        required: true
-        type: string
-        default: "kernel_msm-5.15"
-      localVersion:
-        description: "Custom localversion name (e.g., -mybuild)"
-        required: false
-        type: string
-        default: ""
-      anyKernelRepo:
-        description: "AnyKernel3 repository URL"
-        required: false
-        type: string
-        default: "https://github.com/ssocozy/Anykernel3"
-      anyKernelBranch:
-        description: "AnyKernel3 branch name"
-        required: false
-        type: string
-        default: "main"
+        default: "ZyC Clang"
+        type: choice
+        options:
+          - "ZyC Clang"
+          - "Greenforce Clang"
+          - "SuperRyzen Clang"
+          - "WeebX Clang"
 
 jobs:
   Set-repos:
-    name: "🐂 Parse repos.json"
+    name: "🐂 Parse repository"
     runs-on: ubuntu-latest
     outputs:
       repos: ${{ steps.generate-matrix.outputs.repos }}
@@ -77,8 +81,30 @@ jobs:
       - name: "😆 Generate Matrix"
         id: generate-matrix
         run: |
-          # Read the JSON configuration
-          repos=$(cat ${{ env.CONFIGURATION }})
+          # Initialize the repository with a valid structure
+          repos='[
+            {
+              "kernelSource": {
+                "repo": "",
+                "branch": ""
+              },
+              "toolchains": [
+                {
+                  "name": "clang",
+                  "url": ""
+                }
+              ],
+              "params": {
+                "ARCH": "arm64",
+                "CROSS_COMPILE": "aarch64-linux-gnu-",
+                "CROSS_COMPILE_ARM32": "arm-linux-gnueabi-",
+                "CROSS_COMPILE_COMPAT": "arm-linux-gnueabi-",
+                "CLANG_TRIPLE": "aarch64-linux-gnu-",
+                "AR": "",
+                "CC": "clang"
+              }
+            }
+          ]'
 
           # Override the kernel source URL and branch with user inputs
           repos=$(echo "$repos" | jq --arg url "${{ github.event.inputs.kernelSourceURL }}" --arg branch "${{ github.event.inputs.kernelBranch }}" '.[].kernelSource.repo = $url | .[].kernelSource.branch = $branch')
@@ -103,6 +129,25 @@ jobs:
       kernelName: ${{ github.event.inputs.kernelSourceName }}
       kernelRepo: ${{ github.event.inputs.kernelSourceURL }}
       kernelBranch: ${{ github.event.inputs.kernelBranch }}
+      kernelDevice: ${{ github.event.inputs.kernelDevice }}
+      DEFCONFIG_NAME: ${{ github.event.inputs.kernelDevice }}_defconfig
+      TOOLCHAINS: |
+        [
+          {
+            "name": "clang",
+            "url": "${{ github.event.inputs.clangCompiler }}"
+          }
+        ]
+      PARAMS: |
+        {
+          "ARCH": "arm64",
+          "CROSS_COMPILE": "aarch64-linux-gnu-",
+          "CROSS_COMPILE_ARM32": "arm-linux-gnueabi-",
+          "CROSS_COMPILE_COMPAT": "arm-linux-gnueabi-",
+          "CLANG_TRIPLE": "aarch64-linux-gnu-",
+          "AR": "",
+          "CC": "clang"
+        }
       kernelDevice: ${{ matrix.repos.device }}
       DEFCONFIG_NAME: ${{ matrix.repos.defconfig }}
 
@@ -151,69 +196,64 @@ jobs:
               ${{ github.event.inputs.kernelSourceURL }} ${{ env.kernelName }} --depth=1
           fi
 
-      - name: "💫 Get toolchains"
-        env:
-          toolchains: "${{ toJSON(matrix.repos.toolchains) }}"
+      - name: "💫 Get Toolchains"
         run: |
-          toolchains_num="$(echo $toolchains | jq 'length')"
-          echo "🤔 There are $toolchains_num defined toolchains."
-
-          for ((i=0; i<toolchains_num; i++)); do
-            toolchain=$(echo "$toolchains" | jq -r ".[$i]")
-            toolchain_name=$(echo "$toolchain" | jq -r ".name")
-
-            if echo "$toolchain" | jq -e 'has("url")' > /dev/null; then
-              toolchain_url=$(echo "$toolchain" | jq -r ".url")
-              mkdir -p "$toolchain_name"
-              filename="${toolchain_url##*/}"
-
-              echo "🚀 Downloading $toolchain_name from $toolchain_url..."
-              if wget --progress=bar:force -O "$filename" "$toolchain_url"; then
-                case "$filename" in
-                  *.zip) unzip -d "$toolchain_name" "$filename" ;;
-                  *.tar) tar -xvf "$filename" -C "$toolchain_name" ;;
-                  *.tar.gz|*.tgz) tar -zxvf "$filename" -C "$toolchain_name" ;;
-                  *.tar.xz) tar -xJf "$filename" -C "$toolchain_name" ;;
-                  *.rar) unrar x "$filename" "$toolchain_name" ;;
-                  *) echo "⚠️ Unknown file type: $filename, skipping extraction." ;;
-                esac
-                rm -f "$filename"
-                echo "✅ Downloaded and extracted $toolchain_name"
-              else
-                echo "❌ Failed to download $toolchain_url"
-                exit 1
-              fi
-            else
-              toolchain_repo=$(echo "$toolchain" | jq -r ".repo")
-              toolchain_branch=$(echo "$toolchain" | jq -r ".branch")
-              echo "🚀 Cloning $toolchain_name from $toolchain_repo (branch: $toolchain_branch)..."
-              if git clone --recursive --depth=1 -j "$(nproc)" --branch "$toolchain_branch" "$toolchain_repo" "$toolchain_name"; then
-                echo "✅ Cloned $toolchain_name"
-              else
-                echo "❌ Failed to clone $toolchain_repo"
-                exit 1
-              fi
-            fi
-
-            # Properly iterate over binaryEnv and export paths
-            echo "$toolchain" | jq -r ".binaryEnv[] | tostring" | while read -r subPath; do
-              echo "${{ github.workspace }}/$toolchain_name/$subPath" >> "$GITHUB_PATH"
-            done
-          done
-
-      - name: "🛠 Set ZyC Clang as Default"
-        run: |
-          export CLANG_PATH="${{ github.workspace }}/clang/bin"
-          if [ -d "$CLANG_PATH" ]; then
-            echo "✅ ZyC Clang found in $CLANG_PATH"
+          # Determine the Clang URL based on the selected compiler
+          case "${{ github.event.inputs.clangCompiler }}" in
+            "ZyC Clang")
+              clang_url="https://github.com/ZyCromerZ/Clang/releases/download/21.0.0git-20250221-release/Clang-21.0.0git-20250221.tar.gz"
+              ;;
+            "Greenforce Clang")
+              clang_url="https://github.com/greenforce-project/greenforce_clang/releases/download/23022025/greenforce-clang-21.0.0git-23022025.tar.gz"
+              ;;
+            "SuperRyzen Clang")
+              clang_url="https://gitlab.com/TianWalkzzMiku/SuperRyzen-Clang/"
+              ;;
+            "WeebX Clang")
+              clang_url="https://github.com/XSans0/WeebX-Clang/releases/download/WeebX-Clang-19.1.5-release/WeebX-Clang-19.1.5.tar.gz"
+              ;;
+            *)
+              echo "❌ Unsupported Clang compiler: ${{ github.event.inputs.clangCompiler }}"
+              exit 1
+              ;;
+          esac
+  
+          # Create clang directory
+          mkdir -p clang
+  
+          # Check if it's an archive or a Git repo
+          if [[ "$clang_url" == *.tar.gz || "$clang_url" == *.zip || "$clang_url" == *.tar.xz || "$clang_url" == *.tgz || "$clang_url" == *.rar ]]; then
+            echo "🚀 Downloading ${clang_url}..."
+            wget --progress=bar:force -O "clang/clang.tar.gz" "$clang_url" || { echo "❌ Failed to download Clang!"; exit 1; }
+  
+            # Extract Clang
+            echo "📦 Extracting Clang..."
+            tar -xf clang/clang.tar.gz -C clang || { echo "❌ Extraction failed!"; exit 1; }
+            rm -f clang/clang.tar.gz
           else
-            echo "❌ ZyC Clang NOT found, build might fail!"
+            echo "🚀 Cloning Clang from $clang_url..."
+            git clone --recursive --depth=1 "$clang_url" clang || { echo "❌ Cloning failed!"; exit 1; }
+          fi
+  
+          # Find Clang's bin directory
+          if [ -d "clang/bin" ]; then
+            CLANG_PATH="${{ github.workspace }}/clang/bin"
+          else
+            CLANG_PATH=$(find clang -type d -name "bin" | head -n 1)
+            CLANG_PATH="${{ github.workspace }}/${CLANG_PATH}"
+          fi
+  
+          # Ensure Clang binary exists
+          if [ ! -f "$CLANG_PATH/clang" ]; then
+            echo "❌ Clang binary not found in $CLANG_PATH! Build might fail."
+            ls -R clang  # Debugging: Show extracted files
             exit 1
           fi
-
+    
+          echo "✅ Using Clang from $CLANG_PATH"
           echo "CLANG_PATH=$CLANG_PATH" >> $GITHUB_ENV
           echo "$CLANG_PATH" >> $GITHUB_PATH  # Ensures path is updated
-
+    
           export PATH="$CLANG_PATH:$PATH"
           export CLANG_TRIPLE="aarch64-linux-gnu-"
           export CC="clang"
@@ -223,10 +263,10 @@ jobs:
           export OBJCOPY="llvm-objcopy"
           export OBJDUMP="llvm-objdump"
           export STRIP="llvm-strip"
-
+    
           echo "⚙️ Using Clang version:"
-          clang --version
-
+          clang --version || echo "❌ Clang not found in PATH!" 
+    
       - name: 📐 Set swap to 50G
         uses: pierotofy/set-swap-space@master
         with:
