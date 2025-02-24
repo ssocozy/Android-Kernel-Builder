@@ -57,58 +57,37 @@ The `Set-repos` job reads the kernel sources from the configuration file and out
 
 ## Configuration File Syntax
 
-Here is an example configuration file:
+Here is an example configuration file (`repos.json`):
 
 ```json
 [
   {
-    "kernelSource": {
-      "name": "DogDayAndroid",
-      "repo": "https://codeberg.org/DogDayAndroid/android_kernel_xiaomi_thyme",
-      "branch": "lineage-20.0",
-      "device": "thyme"
-    },
-    "withKernelSU": false,
-    "toolchains": [
-      {
-        "repo": "https://android.googlesource.com/platform/prebuilts/gas/linux-x86",
-        "branch": "master",
-        "name": "gas"
-      },
-      {
-        "repo": "https://gitlab.com/ThankYouMario/android_prebuilts_clang-standalone/",
-        "branch": "11",
-        "name": "clang"
+    "device": "gki",
+    "defconfig": "gki_defconfig",
+    "anykernel": {
+      "repo": "https://github.com/osm0sis/AnyKernel3",
+      "branch": "main",
+      "configs": {
+        "do.devicecheck": true,
+        "do.modules": false,
+        "do.systemless": true,
+        "do.cleanup": true,
+        "do.cleanuponabort": true,
+        "device.name1": "topaz",
+        "device.name2": "tapas",
+        "supported.versions": "13 - 15",
+        "supported.patchlevels": ""
       }
-    ],
-    "params": {
-      "ARCH": "arm64",
-      "CROSS_COMPILE": "aarch64-linux-gnu-",
-      "CROSS_COMPILE_ARM32": "arm-linux-gnueabi-",
-      "CROSS_COMPILE_COMPAT": "arm-linux-gnueabi-",
-      "CLANG_TRIPLE": "aarch64-linux-gnu-",
-      "AR": "",
-      "CC": "clang"
-    }
-  },
-  {
-    "kernelSource": {
-      "name": "DogDay-KernelSU",
-      "repo": "https://codeberg.org/DogDayAndroid/android_kernel_xiaomi_thyme",
-      "branch": "lineage-20.0",
-      "device": "thyme"
     },
-    "withKernelSU": true,
     "toolchains": [
       {
+        "name": "gas",
         "repo": "https://android.googlesource.com/platform/prebuilts/gas/linux-x86",
-        "branch": "master",
-        "name": "gas"
+        "branch": "master"
       },
       {
-        "repo": "https://gitlab.com/ThankYouMario/android_prebuilts_clang-standalone/",
-        "branch": "11",
-        "name": "clang"
+        "name": "clang",
+        "url": "https://github.com/ZyCromerZ/Clang/releases/download/21.0.0git-20250221-release/Clang-21.0.0git-20250221.tar.gz"
       }
     ],
     "params": {
@@ -126,12 +105,13 @@ Here is an example configuration file:
 
 This JSON code describes a build configuration that includes the following:
 
-| Field Name   | Description                                                                                                                         |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| kernelSource | Information about the kernel source code, including its name, repository URL, branch, and device.                                   |
-| withKernelSU | A boolean value indicating whether the `KernelSU` kernel patch tool was used.                                                       |
-| toolchains   | An array containing information about the required toolchains, including the repository URL, branch, and name.                      |
-| params       | An object containing information about the build parameters, including architecture type, cross-compiler, and compiler information. |
+| Field Name  | Description                                                                                                                         |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| device      | The device codename used for kernel directory naming and configuration.                                                              |
+| defconfig   | The name of the kernel configuration file to use (e.g., gki_defconfig).                                                             |
+| anykernel   | Configuration for AnyKernel3 packaging, including repository URL, branch, and device-specific settings.                             |
+| toolchains  | An array containing information about the required toolchains, including the repository URL/download link, branch, and name.        |
+| params      | An object containing information about the build parameters, including architecture type, cross-compiler, and compiler information. |
 
 Here's a table of the parameters in the `params` object:
 

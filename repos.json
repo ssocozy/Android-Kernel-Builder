@@ -1,8 +1,22 @@
 [
   {
-    "device": "deviceConfig",
+    "device": "gki",
     "defconfig": "gki_defconfig",
-
+    "anykernel": {
+      "repo": "https://github.com/osm0sis/AnyKernel3",
+      "branch": "main",
+      "configs": {
+        "do.devicecheck": true,
+        "do.modules": false,
+        "do.systemless": true,
+        "do.cleanup": true,
+        "do.cleanuponabort": true,
+        "device.name1": "topaz",
+        "device.name2": "tapas",
+        "supported.versions": "13 - 15",
+        "supported.patchlevels": ""
+      }
+    },
     "toolchains": [
       {
         "name": "gas",

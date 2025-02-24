@@ -129,8 +129,8 @@ jobs:
       kernelName: ${{ github.event.inputs.kernelSourceName }}
       kernelRepo: ${{ github.event.inputs.kernelSourceURL }}
       kernelBranch: ${{ github.event.inputs.kernelBranch }}
-      kernelDevice: ${{ github.event.inputs.kernelDevice }}
-      DEFCONFIG_NAME: ${{ github.event.inputs.kernelDevice }}_defconfig
+      kernelDevice: ${{ matrix.repos.device }}
+      DEFCONFIG_NAME: ${{ matrix.repos.defconfig }}
       TOOLCHAINS: |
         [
           {
@@ -148,8 +148,6 @@ jobs:
           "AR": "",
           "CC": "clang"
         }
-      kernelDevice: ${{ matrix.repos.device }}
-      DEFCONFIG_NAME: ${{ matrix.repos.defconfig }}
 
     steps:
       - name: "✨ Create working dir"
@@ -678,8 +676,17 @@ jobs:
             exit 1
           fi
 
-          echo "📦 Cloning AnyKernel3 repository..."
-          git clone --depth 1 "${{ github.event.inputs.anyKernelRepo }}" -b "${{ github.event.inputs.anyKernelBranch }}" "$ANYKERNEL_DIR"
+          # Get AnyKernel3 config from matrix
+          AK3_REPO=$(echo '${{ toJSON(matrix.repos) }}' | jq -r '.anykernel.repo')
+          AK3_BRANCH=$(echo '${{ toJSON(matrix.repos) }}' | jq -r '.anykernel.branch')
+
+          echo "📦 Cloning AnyKernel3 repository from $AK3_REPO branch $AK3_BRANCH..."
+          git clone --depth 1 "$AK3_REPO" -b "$AK3_BRANCH" "$ANYKERNEL_DIR"
+
+          # Apply AnyKernel3 configurations
+          echo "📝 Configuring AnyKernel3..."
+          AK3_CONFIGS=$(echo '${{ toJSON(matrix.repos) }}' | jq -r '.anykernel.configs')
+          echo "$AK3_CONFIGS" | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' > "$ANYKERNEL_DIR/properties"
    
           echo "📦 Copying kernel image..."
           cp "$KERNEL_IMAGE" "$ANYKERNEL_DIR/"
