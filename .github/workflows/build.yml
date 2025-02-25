@@ -10,7 +10,7 @@ on:
         description: "Custom kernel source URL"
         required: true
         type: string
-        default: "https://github.com/KDEFFALT/kernel_msm-5.15" # Default kernel source URL
+        default: "https://github.com/KDEFFALT/kernel_msm-5.15"
       kernelPrivateSource:
         description: "is private source?"
         required: false
@@ -21,17 +21,16 @@ on:
         required: false
         type: string
         default: "main"
-
       kernelSourceName:
         description: "Kernel source name"
         required: true
         type: string
-        default: "kernel_msm-5.15"  # Default kernel source name
+        default: "kernel_msm-5.15"
       localVersion:
         description: "Custom localversion name (e.g., -mybuild)"
         required: false
         type: string
-        default: ""  # Default is empty (no suffix)
+        default: ""
       kernelSUChoice:
         description: "Choose KernelSU version"
         required: true
@@ -52,7 +51,7 @@ on:
         description: "SUSFS branch to use"
         required: false
         type: string
-        default: "gki-android13-5.15"  # Default SUSFS branch
+        default: "gki-android13-5.15"
       clangCompiler:
         description: "Clang compiler to use"
         required: false
@@ -77,16 +76,11 @@ jobs:
       - name: "😆 Generate Matrix"
         id: generate-matrix
         run: |
-          # Read repos.json
           repos=$(cat repos.json)
-
-          # Ensure repos.json exists and is valid JSON
           if [ $? -ne 0 ] || ! echo "$repos" | jq . >/dev/null 2>&1; then
             echo "Error: repos.json is missing or invalid"
             exit 1
           fi
-
-          # Output the modified JSON
           echo "repos<<EOF" >> $GITHUB_OUTPUT
           echo "$repos" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -125,37 +119,27 @@ jobs:
         env:
           PRIVATE_SOURCE: ${{ github.event.inputs.kernelSourceURL }}
         run: |
-          set -x  # Enable debugging
+          set -x
           if [ "${{ github.event.inputs.kernelPrivateSource }}" == "true" ]; then
-            # Detect if the URL is from GitHub or GitLab and extract the username
             if [[ "$PRIVATE_SOURCE" == *"github.com"* ]]; then
               PRIVATE_SOURCE="${PRIVATE_SOURCE#https://github.com/}"
-              OWNER=$(echo "$PRIVATE_SOURCE" | cut -d'/' -f1)  # Extract the owner/username
+              OWNER=$(echo "$PRIVATE_SOURCE" | cut -d'/' -f1)
               REPO_PREFIX="https://$OWNER:${{ secrets.PRIVATE_REPO_TOKEN }}@github.com/"
             elif [[ "$PRIVATE_SOURCE" == *"gitlab.com"* ]]; then
               PRIVATE_SOURCE="${PRIVATE_SOURCE#https://gitlab.com/}"
-              OWNER=$(echo "$PRIVATE_SOURCE" | cut -d'/' -f1)  # Extract the owner/username
+              OWNER=$(echo "$PRIVATE_SOURCE" | cut -d'/' -f1)
               REPO_PREFIX="https://$OWNER:${{ secrets.PRIVATE_REPO_TOKEN }}@gitlab.com/"
             else
               echo "Unsupported repository source: $PRIVATE_SOURCE"
               exit 1
             fi
-
-            # Debugging: Print the final URL (mask the token for security)
-            echo "Final URL: ${REPO_PREFIX}${PRIVATE_SOURCE}"
-
-            # Clone the private repository using the dynamic prefix
-            git clone --recursive --branch ${{ github.event.inputs.kernelBranch }} \
-              "$REPO_PREFIX$PRIVATE_SOURCE" ${{ env.kernelName }} --depth=1
+            git clone --recursive --branch ${{ github.event.inputs.kernelBranch }} "$REPO_PREFIX$PRIVATE_SOURCE" ${{ env.kernelName }} --depth=1
           else
-            # Clone the public repository directly
-            git clone --recursive --branch ${{ github.event.inputs.kernelBranch }} \
-              ${{ github.event.inputs.kernelSourceURL }} ${{ env.kernelName }} --depth=1
+            git clone --recursive --branch ${{ github.event.inputs.kernelBranch }} ${{ github.event.inputs.kernelSourceURL }} ${{ env.kernelName }} --depth=1
           fi
 
       - name: "💫 Get Toolchains"
         run: |
-          # Determine the Clang URL based on the selected compiler
           case "${{ github.event.inputs.clangCompiler }}" in
             "ZyC Clang")
               clang_url="https://github.com/ZyCromerZ/Clang/releases/download/21.0.0git-20250221-release/Clang-21.0.0git-20250221.tar.gz"
@@ -174,56 +158,27 @@ jobs:
               exit 1
               ;;
           esac
-  
-          # Create clang directory
           mkdir -p clang
-  
-          # Check if it's an archive or a Git repo
           if [[ "$clang_url" == *.tar.gz || "$clang_url" == *.zip || "$clang_url" == *.tar.xz || "$clang_url" == *.tgz || "$clang_url" == *.rar ]]; then
-            echo "🚀 Downloading ${clang_url}..."
-            wget --progress=bar:force -O "clang/clang.tar.gz" "$clang_url" || { echo "❌ Failed to download Clang!"; exit 1; }
-  
-            # Extract Clang
-            echo "📦 Extracting Clang..."
-            tar -xf clang/clang.tar.gz -C clang || { echo "❌ Extraction failed!"; exit 1; }
+            wget --progress=bar:force -O "clang/clang.tar.gz" "$clang_url" || exit 1
+            tar -xf clang/clang.tar.gz -C clang || exit 1
             rm -f clang/clang.tar.gz
           else
-            echo "🚀 Cloning Clang from $clang_url..."
-            git clone --recursive --depth=1 "$clang_url" clang || { echo "❌ Cloning failed!"; exit 1; }
+            git clone --recursive --depth=1 "$clang_url" clang || exit 1
           fi
-  
-          # Find Clang's bin directory
           if [ -d "clang/bin" ]; then
             CLANG_PATH="${{ github.workspace }}/clang/bin"
           else
             CLANG_PATH=$(find clang -type d -name "bin" | head -n 1)
             CLANG_PATH="${{ github.workspace }}/${CLANG_PATH}"
           fi
-  
-          # Ensure Clang binary exists
           if [ ! -f "$CLANG_PATH/clang" ]; then
-            echo "❌ Clang binary not found in $CLANG_PATH! Build might fail."
-            ls -R clang  # Debugging: Show extracted files
+            echo "❌ Clang binary not found in $CLANG_PATH!"
             exit 1
           fi
-    
-          echo "✅ Using Clang from $CLANG_PATH"
           echo "CLANG_PATH=$CLANG_PATH" >> $GITHUB_ENV
-          echo "$CLANG_PATH" >> $GITHUB_PATH  # Ensures path is updated
-    
-          export PATH="$CLANG_PATH:$PATH"
-          export CLANG_TRIPLE="aarch64-linux-gnu-"
-          export CC="clang"
-          export AR="llvm-ar"
-          export AS="llvm-as"
-          export NM="llvm-nm"
-          export OBJCOPY="llvm-objcopy"
-          export OBJDUMP="llvm-objdump"
-          export STRIP="llvm-strip"
-    
-          echo "⚙️ Using Clang version:"
-          clang --version || echo "❌ Clang not found in PATH!" 
-    
+          echo "$CLANG_PATH" >> $GITHUB_PATH
+
       - name: 📐 Set swap to 50G
         uses: pierotofy/set-swap-space@master
         with:
@@ -254,17 +209,15 @@ jobs:
           CLANG_TRIPLE=$(echo $params | jq -r ".CLANG_TRIPLE")
           AR=$(echo $params | jq -r ".AR")
           CC=$(echo $params | jq -r ".CC")
-
           echo "ARCH=arm64" >> $GITHUB_ENV
           echo "LLVM=1" >> $GITHUB_ENV
-          echo "LTO=thin" >> $GITHUB_ENV  # ✅ Enable ThinLTO
-
+          echo "LTO=thin" >> $GITHUB_ENV
           args="-j$(nproc --all)"
           if [ -n "${{ env.OUT_DIR }}" ]; then
             mkdir -p $(pwd)/${{ env.OUT_DIR }}
             args="$args O=$(pwd)/${{ env.OUT_DIR }}"
           fi
-          args="$args ARCH=arm64 LLVM=1 LTO=thin"  # ✅ Updated for GKI
+          args="$args ARCH=arm64 LLVM=1 LTO=thin"
           if [ -n "$CROSS_COMPILE" ]; then
             args="$args CROSS_COMPILE=$CROSS_COMPILE"
           fi
@@ -288,9 +241,8 @@ jobs:
       - name: "🛠 Set localversion name in defconfig"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         env:
-          LOCALVERSION: ${{ github.event.inputs.localVersion }}  # Set LOCALVERSION from input
+          LOCALVERSION: ${{ github.event.inputs.localVersion }}
         run: |
-          # Set CONFIG_LOCALVERSION in the defconfig file
           if [ -n "$LOCALVERSION" ]; then
             echo "CONFIG_LOCALVERSION=\"$LOCALVERSION\"" >> arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
             echo "✅ Set CONFIG_LOCALVERSION to: $LOCALVERSION"
@@ -308,9 +260,7 @@ jobs:
           if [ -d "./drivers/kernelsu" ]; then
             rm -rf "./drivers/kernelsu"
           fi
-
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
-
           cat ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
 
       - name: "😋 Update KernelSU-Next"
@@ -323,9 +273,7 @@ jobs:
           if [ -d "./drivers/kernelsu" ]; then
             rm -rf "./drivers/kernelsu"
           fi
-
           curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -
-
           cat ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
 
       - name: "😋 Update KernelSU-Next + Next-SuSFS"
@@ -338,24 +286,13 @@ jobs:
           if [ -d "./drivers/kernelsu" ]; then
             rm -rf "./drivers/kernelsu"
           fi
-
           curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next-susfs/kernel/setup.sh" | bash -s next-susfs
-
-          # Create necessary directories for SUSFS
           mkdir -p fs include/linux
-
-          # Clone SUSFS repository
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
-
-          # Copy SUSFS files and patches
           cp ./susfs4ksu/kernel_patches/fs/* ./fs/
           cp ./susfs4ksu/kernel_patches/include/linux/* ./include/linux/
           cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch ./
-
-          # Apply SUSFS patch
           patch -p1 < 50_add_susfs_in_gki-android13-5.15.patch || true
-
-          # Add SUSFS configuration settings
           echo "CONFIG_KSU=y" >> ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
           echo "CONFIG_KSU_SUSFS=y" >> ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
@@ -374,8 +311,8 @@ jobs:
           echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
           echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
           echo "CONFIG_TMPFS_XATTR=y" >> ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
-
           cat ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
+          echo "SUSFS_SETUP_DONE=true" >> $GITHUB_ENV
 
       - name: "😋 Update KernelSU by @rsuntk"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
@@ -387,15 +324,14 @@ jobs:
           if [ -d "./drivers/kernelsu" ]; then
             rm -rf "./drivers/kernelsu"
           fi
-
           if [ "${{ github.event.inputs.withKernelSUSFS }}" == "true" ]; then
             curl -LSs "https://raw.githubusercontent.com/rsuntk/KernelSU/main/kernel/setup.sh" | bash -s susfs-v1.5.5
             echo "Using KernelSU with SUSFS"
+            echo "SUSFS_SETUP_DONE=true" >> $GITHUB_ENV
           else
             curl -LSs "https://raw.githubusercontent.com/rsuntk/KernelSU/main/kernel/setup.sh" | bash -s main
             echo "Using KernelSU without SUSFS"
           fi
-
           cat ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
 
       - name: "🔍 KernelSU check"
@@ -416,121 +352,88 @@ jobs:
           make ${{ env.args }} ${{ env.DEFCONFIG_NAME }}
 
       - name: 😋 Setup KSU SUSFS
-        if: ${{ github.event.inputs.withKernelSUSFS == 'true' }}
+        if: ${{ github.event.inputs.withKernelSUSFS == 'true' && github.event.inputs.kernelSUChoice != 'None' && env.SUSFS_SETUP_DONE != 'true' }}
         env:
           ARCH: ${{ steps.generate-args.outputs.ARCH }}
           DEFCONFIG: ./${{ env.kernelName }}/arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
           SFS_BRANCH: ${{ github.event.inputs.susfsBranch }}
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
-          set -ex  # Exit on error and print commands
-
-          # Helper functions
+          set -ex
           log() {
             echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
           }
-
           check_status() {
             if [ $? -ne 0 ]; then
               log "Error: $1"
               exit 1
             fi
           }
-
           copy_file() {
             local src="$1"
             local dst="$2"
             local error_msg="$3"
-
             if [ ! -f "$src" ]; then
               log "Error: Source file $src not found"
               exit 1
             fi
-
             cp -f "$src" "$dst"
             check_status "$error_msg"
           }
-
           remove_file() {
             local file="$1"
             local error_msg="$2"
-
             if [ -f "$file" ]; then
               rm -f "$file"
               check_status "$error_msg"
             fi
           }
-
           apply_patch() {
             local patch="$1"
             local error_msg="$2"
-
             log "Attempting to apply patch: $(basename "$patch")"
             if ! patch -p1 < "$patch"; then
               log "Warning: Some hunks failed while applying patch $(basename "$patch")"
             fi
           }
-
           log "Starting SUSFS setup..."
-
-          # First clean up any existing files
           log "Cleaning up existing files..."
           remove_file "fs/susfs.c" "Failed to remove existing susfs.c"
           remove_file "include/linux/susfs.h" "Failed to remove existing susfs.h"
           remove_file "fs/sus_su.c" "Failed to remove existing sus_su.c"
           remove_file "include/linux/sus_su.h" "Failed to remove existing sus_su.h"
-
-          # Create necessary directories
           log "Creating necessary directories..."
           mkdir -p fs include/linux
           check_status "Failed to create directories"
-
-          # Clone SUSFS repository
           if [ -d "./susfs4ksu" ]; then
             rm -rf "./susfs4ksu"
           fi
           log "Cloning SUSFS repository (branch: ${{env.SFS_BRANCH}})..."
-          git clone -v https://gitlab.com/simonpunk/susfs4ksu.git -b "${{env.SFS_BRANCH}}" || {
-            log "Failed to clone SUSFS repository"
-            exit 1
-          }
-
-          # Verify SUSFS repository structure
-          log "Verifying repository structure..."
+          git clone -v https://gitlab.com/simonpunk/susfs4ksu.git -b "${{env.SFS_BRANCH}}" || exit 1
           if [ ! -d "susfs4ksu/kernel_patches" ]; then
             log "Error: kernel_patches directory not found in SUSFS repository"
             ls -la susfs4ksu/
             exit 1
           fi
-
-          # Copy SUSFS files
           log "Copying SUSFS files..."
           if [ -d "susfs4ksu/kernel_patches/fs" ]; then
             cp -rv susfs4ksu/kernel_patches/fs/* fs/
             check_status "Failed to copy fs files"
           fi
-
           if [ -d "susfs4ksu/kernel_patches/include/linux" ]; then
             cp -rv susfs4ksu/kernel_patches/include/linux/* include/linux/
             check_status "Failed to copy include files"
           fi
-
-          # Copy and apply patches
           log "Processing patches..."
           find susfs4ksu/kernel_patches -name "*.patch" -type f -exec cp -v {} . \;
-
           for patch in *.patch; do
             if [ -f "$patch" ]; then
               apply_patch "$patch" "Failed to apply patch: $patch"
             fi
           done
-
-          # Configure SUSFS
           log "Configuring SUSFS..."
           CONFIG_FILE="./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}"
           mkdir -p "$(dirname "$CONFIG_FILE")"
-
-          # Configuration settings
           CONFIGS=(
             "CONFIG_KSU=y"
             "CONFIG_KSU_SUSFS=y"
@@ -551,13 +454,10 @@ jobs:
             "CONFIG_KSU_SUSFS_SUS_SU=y"
             "CONFIG_TMPFS_XATTR=y"
           )
-
           for config in "${CONFIGS[@]}"; do
             echo "$config" >> "$CONFIG_FILE"
           done
-
           log "✅ SUSFS setup completed successfully"
-          log "Current config file contents:"
           cat "$CONFIG_FILE"
 
       - name: "🎶 Build kernel"
@@ -567,20 +467,14 @@ jobs:
         run: |
           export KBUILD_BUILD_USER="Action"
           export KBUILD_BUILD_HOST="GitHub"
-
-          # Enable CCache
           export CCACHE_DIR="${{ github.workspace }}/.ccache"
           export CCACHE_COMPRESS=1
           export CCACHE_COMPRESSLEVEL=6
           export CCACHE_MAXSIZE=10G
           export CCACHE_CPP2=yes
-          ccache -z  # Reset stats
-
-          # Build Kernel
+          ccache -z
           make ${args} \
-            LLVM=1 \
-            LTO=thin \
-            CC=clang \
+            CC='ccache clang' \
             AR=llvm-ar \
             AS=llvm-as \
             NM=llvm-nm \
@@ -594,21 +488,13 @@ jobs:
       - name: "📲 Pack Kernel with AnyKernel3"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
-          set -ex  # Exit on error and print commands
-
-          # Set variables
+          set -ex
           ANYKERNEL_DIR="anykernel3"
           KERNEL_IMAGE="../${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image"
-
-          # Clean up existing directory
           if [ -d "$ANYKERNEL_DIR" ]; then
             rm -rf "$ANYKERNEL_DIR"
           fi
-
-          # Generate date in MMDDYY format
           BUILD_DATE=$(date +%m%d%y)
-
-          # Determine KSU version string
           case "${{ github.event.inputs.kernelSUChoice }}" in
             "None")
               KSU_STRING="vanilla"
@@ -634,56 +520,27 @@ jobs:
               exit 1
               ;;
           esac
-
-          # Set local version string if provided
           LOCAL_VER=""
           if [ -n "${{ github.event.inputs.localVersion }}" ]; then
             LOCAL_VER="_${{ github.event.inputs.localVersion }}"
           fi
-
-          # Construct the filename
           ZIPNAME="${{ env.kernelName }}-${KSU_STRING}-thinlto-${BUILD_DATE}${LOCAL_VER}.zip"
-
-          # Check if kernel image exists
           if [ ! -f "$KERNEL_IMAGE" ]; then
             echo "❌ Kernel image not found at: $KERNEL_IMAGE"
             exit 1
           fi
-
-          # Get AnyKernel3 config from matrix
           AK3_REPO=$(echo '${{ toJSON(matrix.repos) }}' | jq -r '.anykernel.repo')
           AK3_BRANCH=$(echo '${{ toJSON(matrix.repos) }}' | jq -r '.anykernel.branch')
-
-          echo "📦 Cloning AnyKernel3 repository from $AK3_REPO branch $AK3_BRANCH..."
-          git clone --depth 1 "$AK3_REPO" -b "$AK3_BRANCH" "$ANYKERNEL_DIR" || {
-            echo "❌ Failed to clone AnyKernel3 repository"
-            exit 1
-          }
-
-          # Apply AnyKernel3 configurations
-          echo "📝 Configuring AnyKernel3..."
+          git clone --depth 1 "$AK3_REPO" -b "$AK3_BRANCH" "$ANYKERNEL_DIR" || exit 1
           AK3_CONFIGS=$(echo '${{ toJSON(matrix.repos) }}' | jq -r '.anykernel.configs')
           echo "$AK3_CONFIGS" | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' > "$ANYKERNEL_DIR/properties"
-   
-          echo "📦 Copying kernel image..."
-          cp "$KERNEL_IMAGE" "$ANYKERNEL_DIR/" || {
-            echo "❌ Failed to copy kernel image"
-            exit 1
-          }
-
-          echo "📦 Creating ZIP package..."
+          cp "$KERNEL_IMAGE" "$ANYKERNEL_DIR/" || exit 1
           cd "$ANYKERNEL_DIR" || exit 1
-          zip -r9 "../$ZIPNAME" * -x .git README.md '*placeholder' "../$ZIPNAME" || {
-            echo "❌ Failed to create ZIP package"
-            exit 1
-          }
-
-          # Verify the ZIP was created
+          zip -r9 "../$ZIPNAME" * -x .git README.md '*placeholder' "../$ZIPNAME" || exit 1
           if [ ! -f "../$ZIPNAME" ]; then
             echo "❌ ZIP package was not created successfully"
             exit 1
           fi
-
           echo "✅ Kernel package created: $ZIPNAME"
 
       - name: "📤 Save ccache Cache"
@@ -692,7 +549,6 @@ jobs:
           path: ${{ github.workspace }}/.ccache
           key: ${{ runner.os }}-ccache-${{ github.sha }}
 
-      # Export build info for artifacts
       - name: "📝 Set Build Info"
         id: build-info
         run: |
