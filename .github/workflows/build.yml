@@ -594,9 +594,16 @@ jobs:
       - name: "📲 Pack Kernel with AnyKernel3"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
+          set -ex  # Exit on error and print commands
+
           # Set variables
           ANYKERNEL_DIR="anykernel3"
           KERNEL_IMAGE="../${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image"
+
+          # Clean up existing directory
+          if [ -d "$ANYKERNEL_DIR" ]; then
+            rm -rf "$ANYKERNEL_DIR"
+          fi
 
           # Generate date in MMDDYY format
           BUILD_DATE=$(date +%m%d%y)
@@ -640,7 +647,10 @@ jobs:
           AK3_BRANCH=$(echo '${{ toJSON(matrix.repos) }}' | jq -r '.anykernel.branch')
 
           echo "📦 Cloning AnyKernel3 repository from $AK3_REPO branch $AK3_BRANCH..."
-          git clone --depth 1 "$AK3_REPO" -b "$AK3_BRANCH" "$ANYKERNEL_DIR"
+          git clone --depth 1 "$AK3_REPO" -b "$AK3_BRANCH" "$ANYKERNEL_DIR" || {
+            echo "❌ Failed to clone AnyKernel3 repository"
+            exit 1
+          }
 
           # Apply AnyKernel3 configurations
           echo "📝 Configuring AnyKernel3..."
@@ -648,11 +658,23 @@ jobs:
           echo "$AK3_CONFIGS" | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' > "$ANYKERNEL_DIR/properties"
    
           echo "📦 Copying kernel image..."
-          cp "$KERNEL_IMAGE" "$ANYKERNEL_DIR/"
+          cp "$KERNEL_IMAGE" "$ANYKERNEL_DIR/" || {
+            echo "❌ Failed to copy kernel image"
+            exit 1
+          }
 
           echo "📦 Creating ZIP package..."
-          cd "$ANYKERNEL_DIR"
-          zip -r9 "../$ZIPNAME" * -x .git README.md *placeholder "../$ZIPNAME"
+          cd "$ANYKERNEL_DIR" || exit 1
+          zip -r9 "../$ZIPNAME" * -x .git README.md *placeholder "../$ZIPNAME" || {
+            echo "❌ Failed to create ZIP package"
+            exit 1
+          }
+
+          # Verify the ZIP was created
+          if [ ! -f "../$ZIPNAME" ]; then
+            echo "❌ ZIP package was not created successfully"
+            exit 1
+          }
 
           echo "✅ Kernel package created: $ZIPNAME"
 
@@ -694,10 +716,19 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: "🔍 Debug AnyKernel3 Package"
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Listing anykernel3 directory:"
+          ls -la anykernel3/
+          echo "Looking for zip files:"
+          find . -name "*.zip" -type f
+
       - name: "💛 Upload AnyKernel3 Package"
         uses: actions/upload-artifact@v4
         with:
           name: "${{ env.kernelName }}-${{ steps.build-info.outputs.KSU_STRING }}-thinlto-${{ steps.build-info.outputs.BUILD_DATE }}${{ github.event.inputs.localVersion != '' && format('_{0}', github.event.inputs.localVersion) || '' }}"
-          path: ./${{ env.kernelDir }}/${{ env.kernelName }}/Anykernel3/*.zip
+          path: ./${{ env.kernelDir }}/${{ env.kernelName }}/*.zip
           if-no-files-found: error
           retention-days: 7
