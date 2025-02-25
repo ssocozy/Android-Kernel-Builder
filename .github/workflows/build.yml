@@ -611,19 +611,27 @@ jobs:
           # Determine KSU version string
           case "${{ github.event.inputs.kernelSUChoice }}" in
             "None")
-              KSU_STRING="vanilla";;
+              KSU_STRING="vanilla"
+              ;;
             "KernelSU")
-              KSU_STRING="ksu";;
+              KSU_STRING="ksu"
+              ;;
             "KernelSU-Next")
-              KSU_STRING="ksu-next";;
+              KSU_STRING="ksu-next"
+              ;;
             "KernelSU-Next + Next-SuSFS")
-              KSU_STRING="ksu-next-susfs";;
+              KSU_STRING="ksu-next-susfs"
+              ;;
             "KernelSU by @rsuntk")
               if [ "${{ github.event.inputs.withKernelSUSFS }}" == "true" ]; then
                 KSU_STRING="ksu-rsuntk-susfs"
               else
                 KSU_STRING="ksu-rsuntk"
               fi
+              ;;
+            *)
+              echo "❌ Unknown KernelSU choice"
+              exit 1
               ;;
           esac
 
@@ -665,7 +673,7 @@ jobs:
 
           echo "📦 Creating ZIP package..."
           cd "$ANYKERNEL_DIR" || exit 1
-          zip -r9 "../$ZIPNAME" * -x .git README.md *placeholder "../$ZIPNAME" || {
+          zip -r9 "../$ZIPNAME" * -x .git README.md '*placeholder' "../$ZIPNAME" || {
             echo "❌ Failed to create ZIP package"
             exit 1
           }
@@ -674,7 +682,7 @@ jobs:
           if [ ! -f "../$ZIPNAME" ]; then
             echo "❌ ZIP package was not created successfully"
             exit 1
-          }
+          fi
 
           echo "✅ Kernel package created: $ZIPNAME"
 
