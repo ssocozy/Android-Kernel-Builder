@@ -4,7 +4,7 @@
     "defconfig": "gki_defconfig",
     "anykernel": {
       "repo": "https://github.com/osm0sis/AnyKernel3",
-      "branch": "main",
+      "branch": "master",
       "configs": {
         "do.devicecheck": true,
         "do.modules": false,
