@@ -698,6 +698,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: "${{ env.kernelName }}-${{ steps.build-info.outputs.KSU_STRING }}-thinlto-${{ steps.build-info.outputs.BUILD_DATE }}${{ github.event.inputs.localVersion != '' && format('_{0}', github.event.inputs.localVersion) || '' }}"
-          path: ./${{ env.kernelDir }}/${{ env.kernelName }}/anykernel3/*.zip
+          path: ./${{ env.kernelDir }}/${{ env.kernelName }}/Anykernel3/*.zip
           if-no-files-found: error
           retention-days: 7
