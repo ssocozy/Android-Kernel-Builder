@@ -598,8 +598,8 @@ jobs:
           ANYKERNEL_DIR="anykernel3"
           KERNEL_IMAGE="../${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image"
 
-          # Generate date in YYYYMMDD format
-          BUILD_DATE=$(date +%Y%m%d)
+          # Generate date in MMDDYY format
+          BUILD_DATE=$(date +%m%d%y)
 
           # Determine KSU version string
           case "${{ github.event.inputs.kernelSUChoice }}" in
@@ -627,7 +627,7 @@ jobs:
           fi
 
           # Construct the filename
-          ZIPNAME="${{ env.kernelName }}_${BUILD_DATE}_${KSU_STRING}_thinlto${LOCAL_VER}.zip"
+          ZIPNAME="${{ env.kernelName }}-${KSU_STRING}-thinlto-${BUILD_DATE}${LOCAL_VER}.zip"
 
           # Check if kernel image exists
           if [ ! -f "$KERNEL_IMAGE" ]; then
@@ -666,7 +666,7 @@ jobs:
       - name: "📝 Set Build Info"
         id: build-info
         run: |
-          echo "BUILD_DATE=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
+          echo "BUILD_DATE=$(date +%m%d%y)" >> $GITHUB_OUTPUT
           KSU_TYPE="${{ github.event.inputs.kernelSUChoice }}"
           case "$KSU_TYPE" in
             "None")
@@ -689,7 +689,7 @@ jobs:
       - name: "💛 Upload Raw Image"
         uses: actions/upload-artifact@v4
         with:
-          name: "${{ env.kernelName }}_${{ steps.build-info.outputs.BUILD_DATE }}_${{ steps.build-info.outputs.KSU_STRING }}_thinlto_raw"
+          name: "${{ env.kernelName }}-${{ steps.build-info.outputs.KSU_STRING }}-thinlto-${{ steps.build-info.outputs.BUILD_DATE }}-raw"
           path: ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot/Image
           if-no-files-found: error
           retention-days: 7
@@ -697,7 +697,7 @@ jobs:
       - name: "💛 Upload AnyKernel3 Package"
         uses: actions/upload-artifact@v4
         with:
-          name: "${{ env.kernelName }}_${{ steps.build-info.outputs.BUILD_DATE }}_${{ steps.build-info.outputs.KSU_STRING }}_thinlto${{ github.event.inputs.localVersion != '' && format('_{0}', github.event.inputs.localVersion) || '' }}"
+          name: "${{ env.kernelName }}-${{ steps.build-info.outputs.KSU_STRING }}-thinlto-${{ steps.build-info.outputs.BUILD_DATE }}${{ github.event.inputs.localVersion != '' && format('_{0}', github.event.inputs.localVersion) || '' }}"
           path: ./${{ env.kernelDir }}/${{ env.kernelName }}/anykernel3/*.zip
           if-no-files-found: error
           retention-days: 7
