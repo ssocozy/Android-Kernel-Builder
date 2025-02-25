@@ -21,11 +21,7 @@ on:
         required: false
         type: string
         default: "main"
-      kernelDevice:
-        description: "Device (used for defconfig)"
-        required: true
-        type: string
-        default: "gki"  # Default device codename
+
       kernelSourceName:
         description: "Kernel source name"
         required: true
@@ -81,33 +77,14 @@ jobs:
       - name: "😆 Generate Matrix"
         id: generate-matrix
         run: |
-          # Initialize the repository with a valid structure
-          repos='[
-            {
-              "kernelSource": {
-                "repo": "",
-                "branch": ""
-              },
-              "toolchains": [
-                {
-                  "name": "clang",
-                  "url": ""
-                }
-              ],
-              "params": {
-                "ARCH": "arm64",
-                "CROSS_COMPILE": "aarch64-linux-gnu-",
-                "CROSS_COMPILE_ARM32": "arm-linux-gnueabi-",
-                "CROSS_COMPILE_COMPAT": "arm-linux-gnueabi-",
-                "CLANG_TRIPLE": "aarch64-linux-gnu-",
-                "AR": "",
-                "CC": "clang"
-              }
-            }
-          ]'
+          # Read repos.json
+          repos=$(cat repos.json)
 
-          # Override the kernel source URL and branch with user inputs
-          repos=$(echo "$repos" | jq --arg url "${{ github.event.inputs.kernelSourceURL }}" --arg branch "${{ github.event.inputs.kernelBranch }}" '.[].kernelSource.repo = $url | .[].kernelSource.branch = $branch')
+          # Ensure repos.json exists and is valid JSON
+          if [ $? -ne 0 ] || ! echo "$repos" | jq . >/dev/null 2>&1; then
+            echo "Error: repos.json is missing or invalid"
+            exit 1
+          fi
 
           # Output the modified JSON
           echo "repos<<EOF" >> $GITHUB_OUTPUT
@@ -129,25 +106,7 @@ jobs:
       kernelName: ${{ github.event.inputs.kernelSourceName }}
       kernelRepo: ${{ github.event.inputs.kernelSourceURL }}
       kernelBranch: ${{ github.event.inputs.kernelBranch }}
-      kernelDevice: ${{ matrix.repos.device }}
       DEFCONFIG_NAME: ${{ matrix.repos.defconfig }}
-      TOOLCHAINS: |
-        [
-          {
-            "name": "clang",
-            "url": "${{ github.event.inputs.clangCompiler }}"
-          }
-        ]
-      PARAMS: |
-        {
-          "ARCH": "arm64",
-          "CROSS_COMPILE": "aarch64-linux-gnu-",
-          "CROSS_COMPILE_ARM32": "arm-linux-gnueabi-",
-          "CROSS_COMPILE_COMPAT": "arm-linux-gnueabi-",
-          "CLANG_TRIPLE": "aarch64-linux-gnu-",
-          "AR": "",
-          "CC": "clang"
-        }
 
     steps:
       - name: "✨ Create working dir"
